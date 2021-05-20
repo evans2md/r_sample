@@ -1,0 +1,11 @@
+"0","  # good time to print some histograms to make sure distribution is as-expects
+  if(print_plot==TRUE){
+    hist(m[1:100,]) # first 100 rows e.g group1
+    abline(v=m_ffmq_g1,col='red') # plot group1 population mean
+    
+    hist(obs[101:200,])# group2
+    abline(v=m_ffmq_g2,col='red')
+  }
+"
+"2","Error: object 'print_plot' not found
+"

@@ -1,0 +1,305 @@
+---
+title: "r_sample_analysis"
+author: "Michael D Evans"
+date: "5/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr) 
+library(here)
+library(comprehenr)
+library(gridExtra)
+```
+
+# Mindfulness and Risk Appraisal
+In this mock-study, we are exploring whether a mindfulness coaching app improves the ability to accurately assess risk and thus make more informed decisions. Five hundred participants were given access to a mindfulness coaching phone app and asked to use it for 5 minutes a day (treatment condition), and five hundred were not (control condition). After two weeks of app-use you now want to see whether using a mindfulness coaching app has any effect on individual's self appraisal of mindfulness (survey) and/or risk appraisal (behavioral). If so, you want to know specifically which aspects of mindfulness were improved and which had the largest effect on the measured behavior.
+
+```{r}
+df <- read.csv('ffmq_ic_data.csv')
+```
+
+Now that we have the data, lets check our sample demographics to see if there are any gender or age differences between our groups. Since we do not expect gender or age effects, it's not the most relevant, but if we find group differences, we should definitely follow up with some tests to see if there are any gender or age effects associated with the treatment condition.
+
+```{r demographics, echo = FALSE}
+# gender
+plt<-ggplot(data=df)+
+  geom_bar(mapping=aes(x=gender,fill=as.factor(group)),color='black',position='fill')+
+  labs(fill='Condition',y='Proportion')
+print(plt)
+plt<-ggplot(data=df)+
+  geom_bar(mapping=aes(x=group,fill=gender),color='black')+
+  labs(x='Condition')
+print(plt)
+
+## chi-square to see if genders equally distributed
+gender.x2 <- chisq.test(x=df$gender,y=df$group)
+print(gender.x2)
+print(gender.x2$residuals)
+# since we aren't expecting gender differences, kinda irrelevant but still good to know
+# note chi-square 0 = identical, larger = more divergence
+# if we do find a sig. difference in group demographics, need to make sure we have the statistical power to test tx effect x gender
+
+# age
+plt <- ggplot(df, aes(x=age,fill=as.factor(group))) + 
+  geom_histogram(binwidth = 5,color='black',position = 'dodge')+
+  labs(fill='Group')
+print(plt)
+
+print(t.test(df[df$group == 1,]$age,df[df$group == 2,]$age))
+
+```
+In the current sample, there IS a significant difference in group gender demographics, most strongly in the number of self identified males (under-sampled in tx group), followed up by females (over-sampled in tx group), and least by those who identify as non-binary/other (though slightly over-sampled in tx group; X^2(2, N = 1000) = 6.253, p = 0.044)
+
+We also see a significant difference in age (tx Mean= 35.67, control mean = 37.11; t(996)=-2.12, p = 0.03). Since we see some demographic differences between groups, it will be important to make sure that any observed effects are generalizable to different demographic groups (as opposed to an effect being driven by older male men, for example).
+
+As the treatment group was instructed to practice mindfulness, let's see if there are group differences between the tx group and control regarding the Five Factor Mindfulness Quesionnaire (FFMQ).
+
+```{r ECHO=FALSE}
+ffmq <- df %>% 
+  select(starts_with('ffmq')) # get columns starting with ffmq
+
+df$ffmq_mean <- to_vec(for(i in 1:nrow(ffmq)) rowMeans(ffmq[i,])) # get mean ffmq for each participant (e.g. row)
+df$ffmq_sd <- to_vec(for(i in 1:nrow(ffmq)) sd(ffmq[i,])) # and sd
+
+df_ <- df%>% # for plotting, we'll get the mean of means for each group
+  group_by(group) %>%
+  summarize(mean = mean(ffmq_mean),
+            sd = sd(ffmq_mean))
+
+plt <- ggplot(df_, aes(x=group, y=mean, fill=as.factor(group)))+ # plot means
+  geom_bar(stat='identity', width = 0.75)+ # as bar plots
+  geom_errorbar(aes(ymin=mean-(sd/(sqrt(nrow(df[df$group==1,])))), ymax=mean+(sd/sqrt(nrow(df[df$group==1,])))), width=0.2)+ #sd error bars
+  theme(legend.position = "none", # no need for legend (x-labels suffice)
+        axis.ticks = element_blank(), # remove ticks
+        plot.title = element_text(hjust = 0.5))+ # center title
+  xlim("Treatment","Control")+ # set x-labels
+  xlab('Condition')+
+  ylab('Score')+
+  ggtitle('Mean FFMQ Scores') 
+
+print(plt)
+  
+# t test
+print(t.test(df[df$group == 1,]$ffmq_mean,df[df$group == 2,]$ffmq_mean)) # quick two-samples t-test comparing means
+
+# let's also check whether this is a random effect or not using a non-parametric bootstrap method
+# not necessarily needed since we see (and know) the data is normally distributed, but also only takes a few lines of code!
+actual_mean = mean(df[df$group == 1,]$ffmq_mean) # get actual (accurate group id) mean
+bs_means = vector() # create empty vector to store bootstrapped sample means
+for (i in 1:1e3){ # iterate for the number of desired bootstrapped samples (more is better, 1000 is ok for our purposes)
+  bs_sample = mean(sample_n(df,nrow(df[df$group==1,]),replace=TRUE)$ffmq_mean) # sample WITH replacement = sample size
+  bs_means <- append(bs_means,bs_sample)
+}
+plt <- ggplot(data=as.data.frame(bs_means),aes(x=bs_means))+
+  geom_histogram(fill='cyan',color='black')+
+  geom_vline(xintercept = actual_mean,color='red')+
+  labs(x='Bootstrapped Means')
+print(plt)
+print(mean(bs_means>=actual_mean))
+
+```
+
+
+Cool, looks like the treatment had an effect (t(984)= 19.95, p<0.001 95CI = 0.57 - 0.76), which we then confirmed with a non-parametric bootstrap method (! Before we dig deeper and see how this effect is distributed across the FFMQ, let's also check if the treatment had an impact on task performance...
+
+```{r ECHO=FALSE}
+df_ <- df%>% # temporary df
+  group_by(group) %>% # grouped by group
+  summarize(mean = mean(ic_scoops), # with some basic summary stats
+            sd = sd(ic_scoops))
+
+# bar plot of group means + sd error bars
+plt <- ggplot(df_, aes(x=group, y=mean, fill=as.factor(group)))+ # plot means
+  geom_bar(stat='identity', width = 0.75)+ # as bar plots
+  geom_errorbar(aes(ymin=mean-(sd/(sqrt(nrow(df[df$group==1,])))), ymax=mean+(sd/sqrt(nrow(df[df$group==1,])))), width=0.2)+ #sd error bars+
+  geom_hline(yintercept = 32, linetype='dashed', color='black')+
+  theme(legend.position = "none", # no need for legend (x-labels suffice)
+        axis.ticks = element_blank(), # remove ticks
+        plot.title = element_text(hjust = 0.5))+ # center title
+  ylab('Number of Scoops')+
+  xlab('Condition')+
+  xlim("Treatment","Control")+ # set x-labels
+  ggtitle('Mean Icecream Scores') 
+print(plt)
+
+# histogram of group scoop distributions
+plt<-ggplot(data=df, aes=(x=ic_scoops))+
+  geom_histogram(mapping=aes(x=ic_scoops, fill=as.factor(group)),binwidth=3,color='black', position='identity',alpha=0.7)+
+  labs(fill='Condition',values=c('Treatment','Control'))
+print(plt)
+
+# t test
+print(t.test(df[df$group == 1,]$ic_scoops,df[df$group == 2,]$ic_scoops))
+print(t.test(df[df$group == 1,]$ic_scoops,mu=32))
+
+# non-parametric bootstrap
+actual_mean = mean(df[df$group == 1,]$ic_scoops)
+bs_means = vector()
+for (i in 1:1e3){
+  bs_sample = mean(sample_n(df,nrow(df[df$group==1,]),replace=TRUE)$ic_scoops)
+  bs_means <- append(bs_means,bs_sample)
+}
+plt <- ggplot(data=as.data.frame(bs_means),aes(x=bs_means))+
+  geom_histogram(fill='cyan',color='black')+
+  geom_vline(xintercept = actual_mean,color='red')
+print(plt)
+print(mean(bs_means>=actual_mean))
+
+
+```
+Cool! Even though the distributions look very similar, it looks like people who used the mindfulness app improved their task performance at a fairly significant level! We did a (super) quick check with a two sample T-test, which showed a very significant p-value (p<0.0001), and followed up with a non-parametric bootstrap method which confirmed that there is a very low chance (00.3%) that the results we obtained were due to randomness.
+
+Looking at the distributions it looks that while the app only increases performance marginally, it is broadly effective across different members of the population.
+
+Now let's dig a little deeper to better understand the underlying factors driving this effect.
+
+We can start by looking for influences of gender and age.
+```{r}
+
+# gender
+df_ <- df%>% # temporary df
+  group_by(gender,group) %>% # grouped by gender and group
+  summarize(mean = mean(ic_scoops), # with some basic summary stats
+            sd = sd(ic_scoops))
+
+# categorical 2x3 data, bar plot (groupxgender)
+plt <- ggplot(df_, aes(x=group, y=mean, fill=as.factor(gender)))+ # plot means
+  geom_bar(stat='identity', width = 0.75,position='dodge')+ # position targets gender
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=0.2, position=position_dodge(.7))+ #sd error bars, position dodge relative to width
+  theme(axis.ticks = element_blank(), # remove ticks
+        plot.title = element_text(hjust = 0.5))+ # center title
+  ylab('Number of Scoops')+
+  xlab('Condition')+
+  labs(fill='Gender')+
+  xlim("Treatment","Control")+ # set x-labels
+  ggtitle('Mean Icecream Scores') 
+print(plt)
+
+
+## quick parametric anova to check for differences
+anovaGender = aov(ic_scoops~gender, data=df)
+summary(anovaGender)
+TukeyHSD(anovaGender)
+
+# see very high p values (>0.5), so we could stop here but lets use a non-parametric test, the Kruskal-Wallis 1way anova, too.
+
+kruskal.test(ic_scoops~gender, data=df)
+# no surprise, we see no significant results. This saves us a step of testing between which group(s) there is a difference, since the Kruskal does not specify that information.
+```
+```{r echo=FALSE}
+
+# age
+plt <- ggplot(data=df, mapping=aes(x=age,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(color='Condition',y='Mean # of Scoops', x='Age') # update labels
+print(plt)
+
+# some significance testing of linear model
+age.lm <- lm(ic_scoops~age+group, data=df)
+summary(age.lm)
+```
+Look at that! A significant effect of age, irrespective of treatment or not. As participants got older, it appears they demonstrate more risk-averse behavior, and that this behavior is not mediated by the treatment. 
+
+
+Now lets see if how FFMQ scores as associated with performance
+```{r}
+# ffmq x ic_scoops
+plt <- ggplot(data=df, mapping=aes(x=ffmq_mean,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(color='Condition',y='Mean # of Scoops', x='FFMQ ') # update labels
+print(plt)
+
+# significance testing
+ffmq.lm <- lm(ic_scoops~ffmq_mean+group, data=df)
+ffmq.lm
+summary(ffmq.lm)
+```
+
+Looks like mindfulness as measured by the FFMQ is strongly associated with perfomance on the icecream task, which may mean that practicing mindfulness is useful in situations that require accurate risk appraisal. Together with the fact that we saw a robust improvement in FFMQ scores based on app-usage (treatment condition), we can extend these findings to say that use of the app improves mindfulness practices, and that these improvements result in improved behavior as well! The improvements associated with app-use are generalizable across a large range of age (18-55) and gender identities.
+
+
+Let's dig a little deeper, and see if there are specific aspects of the FFMQ that are most strongly associated with performance in the icecream game. While the FFMQ is designed to be constructed around five-factors (hence the FF in the name!), let's pretend that isn't the case, and see if a factor analysis reveals any factors in our sample.
+```{r echo=FALSE}
+# we can use a principal component factor analysis (uses eigenvalue decomposition to)
+fit <- princomp(ffmq, cor=TRUE) # gives a vector of n components where n is number of items (in our case, 39), and how much variance accounted for by components
+#plot(fit,type='lines') # plot to look for an "elbow" or drastic shift in slope
+plt<-ggplot(data=as.data.frame(fit$sdev),aes(x=1:nrow(data),y=fit$sdev))+
+  geom_line(color='darkslategray4',size=1)+
+  geom_point(color='darkslategray2')+
+  geom_hline(yintercept=mean(fit$sdev),color='red',linetype='dashed',alpha=0.5)+
+  geom_vline(xintercept = length(fit$sdev[fit$sdev>fa_mean])+1,color='red',linetype='dashed',alpha=0.5)
+print(plt) # from our plot, we see a steep drop off in variance accounted for at 5 factors ()
+n_factors <- length(fit$sdev[fit$sdev>fa_mean]) # we can take the number of factors greater than the mean ***SHOULD ALWAYS CONFIRM VISUALLY
+fa <- factanal(ffmq,factors=5) # perform a confirmatory analysis to make number of factors sufficient and view loadings
+fa$PVAL # chi-square test, h: 5 factors enough (if sig, reject = not enough, want min factors that fail to reject)
+fa$loadings
+
+# now that we have our loadings, we can calcualte participant scores for each factor and see which factors are best associated w task performance
+```
+Next we want to determine scores for each factor for each individual, see which factors were most influenced by app-use, and see how eac factor is associated with behavioral scores.
+
+```{r}
+fa_threashold <- 0.5 # set a threshold to have an item belong to a factor
+ffmq_ind = 1:length(ffmq) # vector of indicies for ffmq
+
+# get vectors of item indicies
+fa1_items = ffmq_indicies[fa$loadings[,1]>fa_threashold] # from list of possible indicies, get factor 1 loadings greater than defined threshold
+fa2_items = ffmq_indicies[fa$loadings[,2]>fa_threashold]
+fa3_items = ffmq_indicies[fa$loadings[,3]>fa_threashold]
+fa4_items = ffmq_indicies[fa$loadings[,4]>fa_threashold]
+fa5_items = ffmq_indicies[fa$loadings[,5]>fa_threashold]
+
+# create a column for each factor mean
+df$fa1_mean = rowMeans(ffmq[,fa1_items])
+df$fa2_mean = rowMeans(ffmq[,fa2_items])
+df$fa3_mean = rowMeans(ffmq[,fa3_items])
+df$fa4_mean = rowMeans(ffmq[,fa4_items])
+df$fa5_mean = rowMeans(ffmq[,fa5_items])
+
+
+```
+
+```{r echo=FALSE}
+# ffmq x ic_scoops
+plt1 <- ggplot(data=df, mapping=aes(x=fa1_mean,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(y='Mean # of Scoops', x='Factor1 ')+ # update labels
+  theme(legend.position = "none") # no need for legend (x-labels suffice)
+
+plt2 <- ggplot(data=df, mapping=aes(x=fa2_mean,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(y='Mean # of Scoops', x='Factor2 ')+ # update labels
+  theme(legend.position = "none")
+
+plt3 <- ggplot(data=df, mapping=aes(x=fa3_mean,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(y='Mean # of Scoops', x='Factor3 ')+ # update labels
+  theme(legend.position = "none")
+
+plt4 <- ggplot(data=df, mapping=aes(x=fa4_mean,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(y='Mean # of Scoops', x='Factor4 ')+ # update labels
+  theme(legend.position = "none")
+
+plt5 <- ggplot(data=df, mapping=aes(x=fa5_mean,y=ic_scoops, color=as.factor(group)))+
+  geom_point(alpha=0.2)+ # plot each individual point
+  geom_smooth(method=lm, se=TRUE, fullrange=FALSE, level=0.95)+ # and a regression line 95ci se
+  labs(color='Condition', y='Mean # of Scoops', x='Factor5')+ # update labels
+  theme(legend.position = c(1.5, 0.5))
+
+grid.arrange(plt1, plt2, plt3, plt4, plt5, nrow = 2)
+
+# significance testing
+ffmq.fa1_lm <- lm(ic_scoops~fa1_mean+fa2_mean+fa3_mean+fa4_mean+fa5_mean, data=df)
+summary(ffmq.fa1_lm)
+```
+
