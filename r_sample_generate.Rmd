@@ -1,7 +1,7 @@
 ---
-title: "r_sample"
+title: "r_sample: generate simulated data"
 author: "Michael D Evans"
-date: "5/6/2021"
+date: "5/16/2021"
 output: html_document
 ---
 
@@ -12,27 +12,14 @@ library(dplyr)
 library(here)
 library(comprehenr)
 ```
-
-R sample code
-By Michael D. Evans
-  In this sample, I generate some **simulated data** for a study where participants complete some surveys and play a game that measures risk assesment (game link below!). Participants will be in two groups, a  treatment group ("group1") and a no-treatment group ("group2").
+  In this sample, I generate some **simulated data** for a study where participants complete some surveys and play a game that measures risk assessment (game link below!). Participants will be in two groups, a  treatment group ("group1") and a no-treatment group ("group2").
   
   The hypotheses I am testing are whether participants in the treatment group are more accurately able to assess risk, whether there are differences in survey responses for the groups, and which items from the surveys are most strongly associated with performance.
 
-Survey1: five facet mindfulness questionnaire (39 items)
-Survey2: Barret impulsivity scale (30 items)
-    
+Survey: five facet mindfulness questionnaire (39 items)
 Behavioral Task: Ice Cream Game (try it out: www.mdevans.me/projects/icecream; adapted from BART task, Lejuez et al. 2002 http://www.impulsivity.org/measurement/BART)
-    Your goal in the Ice Cream Game is to sell as much ice cream using as few cones as possible (e.g. sell as many scoops of ice cream as possible for each trial). Each scoop increases the reward value +1. At any point (even the first scoop), the ice cream can fall, and you cannot sell any- you receive 0 points and move onto the next trial. The risk of the scoops falling increases with each additional scoop, with it guranteed to fall by the 64th scoop (1/64 probability on the first scoop, 32/64 on the 32nd scoop, etc.). Optimal behavior would be to sell the ice cream when the probability of failure is as close to 50% as possible, in this case, at 32 scoops. Fewer scoops results in missing out on probable reward, and more scoops results in unneccesary risk.
-    
-Participants:
-Group1 (treatment): 100 adults, 18-55
-Group2 (control):100 adults, 18-55
 
-Hypotheses:
-Hyp1: group1 will show greater task learning and risk appraisal demonstrated with scores non-significantly different from optimal performance (32/64 = .5); group2 will show detrimental risk aversion demonstrated with scores signficantly below optimal.<br>
-Hyp2: group1 performance scores will be statistically different (greater) than group2<br>
-Hyp3: group1 will be statistically different from group2 in all questionnaires as following: higher for FFMQ, lower for BIS, lower for PTQ.
+   The goal in the Ice Cream Game is to sell as much ice cream using as few cones as possible (e.g. sell as many scoops of ice cream as possible for each trial). Each scoop increases the reward value +1. At any point (even the first scoop), the ice cream can fall, and you cannot sell any- you receive 0 points and move onto the next trial. The risk of the scoops falling increases with each additional scoop, with it guaranteed to fall by the 64th scoop (1/64 probability on the first scoop, 32/64 on the 32nd scoop, etc.). Optimal behavior would be to sell the ice cream when the probability of failure is as close to 50% as possible, in this case, at 32 scoops. Fewer scoops results in missing out on probable reward, and more scoops results in unnecessary risk.
 
 ```{r}
 n<-1000 # set TOTAL number of subjects
@@ -73,30 +60,6 @@ for (ii in 1:n){ # counter to go through each gender item
   }
 }
 df$gender = gender # add to our dataframe
-
-#ice cream game
-# since we are simulating data, let's simulate are hypotheses are true
-# so..
-# group1 we'll random sample from a norm dist. m=0.5 sd=0.08
-# group2 random norm m=0.3 sd=0.15
-m_g1 =32 # mean, group 1
-sd_g1 = 2.4 # sd, group 1
-m_g2 = 21.6
-sd_g2 = 3.2
-df$ic_scoops = c(rnorm((n/2),m_g1,sd_g1),rnorm((n/2),m_g2,sd_g2)) # normal dist, add to df
-plt<-ggplot(data=df, aes=(x=ic_scoops))+ # plot as histogram to check distributions
-  geom_histogram(mapping=aes(x=ic_scoops, fill=as.factor(group)),binwidth=3)
-print(plt) # display plot
-
-# any reason to think reaction times would be different between groups?
-# if not, just assign from norm. dist w reasonable time (fast game, so expect low rt)
-m_rt<-400 
-sd_rt<-50
-df$ic_rt = rnorm(n,m_rt,sd_rt) # normal dist., add to dataframe
-plt<-ggplot(data=df)+
-  geom_histogram(mapping=aes(x=ic_rt,fill=as.factor(group)),binwidth=50)
-print(plt)
-df
 ```
 
 
@@ -116,7 +79,7 @@ sd_ffmq_g2 <- 1
 # factor: factor_name(factor_items)
 # factor1: observing (1, 6, 11, 15, 20, 26, 31, 36)
 obs_items = c(1,6,11,15,20,26,31,36) # we'll use later when generating data matrices
-# factor2: describing (2, 7, 12R, 16R, 22R, 27, 32, 37) R = reverse scoring, can subtract upper limit to score (e.g 6; response:1, score:6-1=5)
+# factor2: describing (2, 7, 12R, 16R, 22R, 27, 32, 37)
 desc_items = c(2,7,12,16,22,27,32,37)
 # factor3: awareness (5R, 8R, 13R, 18R, 23R, 28R, 34R, 38R)
 aware_items = c(5,8,13,18,23,28,34,38)
@@ -124,9 +87,6 @@ aware_items = c(5,8,13,18,23,28,34,38)
 nj_items = c(3,10,14,17,25,30,35,39)
 # factor5: nonreactivity (4, 9, 19, 21, 24, 29, 33)
 nr_items = c(4,9,19,21,24,29,33)
-
-# preallocate matrix for score
-ffmq <- matrix(data=NA,nrow=n,ncol=39) # 39 survey items
 
 minMax <- function(m,floor=1,ceiling=5){
 # function to set floor and ceiling values in a matrix
@@ -173,9 +133,6 @@ gen_factor_data <-function(factor_items,print_plot=FALSE){
   
   # get rid of non-factor columns
   m<-removeItems(m,factor_items)
-  
-  # my sample is slightly lower than defined means - due to changing data type to int instead of rounding, but overall looks good!
-  # remove non-factor items
   return(m)
 }
 
@@ -187,15 +144,13 @@ njudge <- gen_factor_data(nj_items)
 nreact <- gen_factor_data(nr_items)
 
 # as is, all factors have the same means since they were generated w same population values
-# let's assume some variability between factors, and for fun, say that the treatment
-# works particularly well for non-judgement and non-react
+# let's add some variability between factors
 
-# to make factors stand out, we can shift the means
 obs<-obs-1 # lower all obs scores by 1
 obs<-minMax(obs) # reset floor/ceiling
 obs<-removeItems(obs,obs_items) # 1 added to 0 values, remove non-factor columns
 
-njudge[1:100,]<-njudge[1:100,]+1 # increase treatment group non-judge by 1
+njudge[1:100,]<-njudge[1:100,]+1 # increase tx group non-judge by 1
 njudge<-minMax(njudge)
 njudge<-removeItems(njudge,nj_items)
 
@@ -203,18 +158,17 @@ nreact[1:100,]<-nreact[1:100,]+1 # increase tx group nreact
 nreact<-minMax(nreact)
 nreact<-removeItems(nreact,nr_items)
 
-aware[101:200,]<-aware[101:200,]+1 # increase control group aware (now ~= to tx group)
+aware[101:200,]<-aware[101:200,]+1 # increase control group aware
 aware<-minMax(aware)
 aware<-removeItems(aware,aware_items)
 
-desc[101:200,]<-desc[101:200,]+1 # increast ctrl group desc (now ~= to tx group)
+desc[101:200,]<-desc[101:200,]+1 # increast ctrl group desc
 desc<-minMax(desc)
 desc<-removeItems(desc,desc_items)
+
 # since we counter-balanced updating values, overall mean for groups should be the same
 # so simply comparing group1 v group2 should show sig diff.
-# when we explore, we should be able to see which factors contribute most to this diff
-# since we set some factors equal to others, I suspect our factor analysis will NOT
-# reveal 5 factors (ones w ~equal means likely to correlate -> lumped into same factor)
+# When we break down FFMQ data, we should be able to see which factors contribute most to this diff
 
 ffmq = data.frame(obs+desc+aware+njudge+nreact) # combine to create final ffmq data frame
 
@@ -222,16 +176,14 @@ ffmq = data.frame(obs+desc+aware+njudge+nreact) # combine to create final ffmq d
 df$ffmq = ffmq
 ```
 
-Now lets pretend that some of these traits are related to task performance- since we want the tx group to stand out, we can focus on the factors where we said tx was most effective: non-judgement (nj) and non-react (nr).
-
-we know typically people under-perform in the task, which makes generating the data a little easier- we can simply set that people who are highest in non-judge+non-react have a mean of 32 and a small sd
+Now lets pretend that some of these traits are related to task performance- non-judgement (nj) and non-react (nr).
 
 ic = normal dist w mean=[8+(12*%nr)+(12*%nj)] and sd=[3/(0.5+(.25*%nj)+(0.25*%nr))]
 
 Using this formula, individuals with perfect nj and nr scores will have a mean of 32 and a sd of 3 ( mean = 8+12*1+12*1 = 32 ; sd = 3/(.5+.25*1+.25*1) = 3/1 = 3)
 Those with a 0 score will have a mean of 8 and a sd of 6 (mean = 8+12*0+12*0 = 8 ; sd = 3/(.5+.25*0+.25*0) = 3/.5 = 6)
 
-Since these are the factors where the two groups differ most, we shouold see a main group effect. Then, when we do a factor analysis to see which factors best predict performance, we should see that it was the factors that the treatment was most influential on - nj and nr. These two factors share group means, so they will likely be lumped together in the factor analysis.
+Since these are the factors where the two groups differ most, we should see a main group effect. Then, when we do a factor analysis to see which factors best predict performance, we should see that it was the factors that the treatment was most influential on - nj and nr.
 
 It is also a good idea to replicate some typical, known behaviors. For example, we know age is generally positively correlated with risk aversion - older people tend to be more cautious in these kinds of games. 
 
@@ -245,6 +197,7 @@ the youngest participants will have a base of 8 (8-0/.2) and the oldest a base o
 
 
 ```{r}
+# icecream game
 
 # calculate nj and nr scores for each row
 calcScoops = function(vec,age){
@@ -260,29 +213,32 @@ calcScoops = function(vec,age){
   
   
   # don't want negative (or even very low) values!
-  
   if(scoops<4){scoops=scoops+4}
   
   return(scoops)
 }
-
-# before using ffmq data (just pre-set group means)
-plt<-ggplot(data=df, aes=(x=ic_scoops))+ # plot as histogram to check distributions
-  geom_histogram(mapping=aes(x=ic_scoops, fill=as.factor(group)),binwidth=3)
-print(plt) # display plot
-
 for (row in 1:nrow(df)){
   vec = df$ffmq[row,]
   age = df$age[row]
   df$ic_scoops[row]=calcScoops(vec,age)
 }
 
-# after
 plt<-ggplot(data=df, aes=(x=ic_scoops))+ # plot as histogram to check distributions
-  geom_histogram(mapping=aes(x=ic_scoops, fill=as.factor(group)),binwidth=3,position='dodge')
+  geom_histogram(mapping=aes(x=ic_scoops, fill=as.factor(group)),binwidth=3,position='identity',color='black',alpha=0.5)+
+  labs(fill='Condition',x='Mean Icecream Score')+
+  scale_fill_discrete(labels=c('Treatment','Control'))
 print(plt) # display plot
 
-# while overall the data may not look too different - both groups are still normal in shape and easily distinguishable from one another, the main difference is just lower means (slightly wider sd's), these new distributions are generated from actual data, so it should give us some interesting things to find during analysis!
+# any reason to think reaction times would be different between groups?
+# if not, just assign from norm. dist w reasonable time (fast game, so expect low rt)
+m_rt<-400 
+sd_rt<-50
+df$ic_rt = rnorm(n,m_rt,sd_rt) # normal dist., add to dataframe
+plt<-ggplot(data=df)+
+  geom_histogram(mapping=aes(x=ic_rt,fill=as.factor(group)),binwidth=50,position='identity',color='black',alpha=0.5)+
+  labs(fill='Condition',x='Mean Response Time')+
+  scale_fill_discrete(labels=c('Treatment','Control'))
+print(plt)
 
 # save as a csv and move onto analysis!
 write.csv(df,paste(here(),'/ffmq_ic_data.csv',sep=''))
@@ -291,4 +247,3 @@ write.csv(df,paste(here(),'/ffmq_ic_data.csv',sep=''))
 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
